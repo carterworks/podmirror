@@ -1,0 +1,5 @@
+- use jutjutsu (jj) for version control
+- use Bun (https://bun.sh/llms.txt) as a JavaScript environment, package manager, test runner. Use Bun native APIs when appropriate.
+- practice test driven development. favor fast, reproducable integration and end to end tests with minimal mocking
+- dependencies should be added only as a last resort, when the problem space is large and complex. The order of preference is always 1. native language feature 2. native Bun API 3. small self contained module 4. external dependency that itself has minimal dependencies 5. any other depdendency
+- weite code that is self contained with no side effects
