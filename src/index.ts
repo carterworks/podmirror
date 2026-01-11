@@ -1,4 +1,5 @@
 import { parseArgs } from "util";
+import { mirror } from "./mirror";
 
 const { values, positionals } = parseArgs({
   args: Bun.argv.slice(2),
@@ -51,5 +52,17 @@ if (values.help || positionals.length < 2) {
 
 const [rssUrl, outputDir] = positionals;
 
-console.log(`Mirroring ${rssUrl} to ${outputDir}...`);
-// TODO: Implement mirror logic
+try {
+  await mirror({
+    rssUrl,
+    outputDir,
+    baseUrl: values.baseUrl,
+    force: values.force,
+    dryRun: values["dry-run"],
+    concurrency: parseInt(values.concurrency || "4", 10),
+  });
+  console.log("Done!");
+} catch (error) {
+  console.error("Error:", error instanceof Error ? error.message : error);
+  process.exit(1);
+}

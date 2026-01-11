@@ -8,5 +8,9 @@
   },
   "peerDependencies": {
     "typescript": "^5"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.3.3",
+    "node-id3": "^0.2.9"
   }
 }
