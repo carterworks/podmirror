@@ -83,7 +83,8 @@ describe("podmirror CLI", () => {
       expect(status).toBe(0);
       
       const manifest = JSON.parse(await readFile(join(outputDir, "mirror.json"), "utf-8"));
-      expect(Object.keys(manifest.assets).length).toBe(2); 
+      // 3 unique URLs
+      expect(Object.keys(manifest.assetsByUrl).length).toBe(3); 
       
       const rewrittenFeed = await readFile(join(outputDir, "feed.xml"), "utf-8");
       expect(rewrittenFeed).toContain("media/");
@@ -171,8 +172,8 @@ describe("podmirror CLI", () => {
       await runPodmirror(["http://127.0.0.1:3005/feed.xml", outputDir]);
 
       const manifest = JSON.parse(await readFile(join(outputDir, "mirror.json"), "utf-8"));
-      const assetHash = manifest.items["http://127.0.0.1:3005/meta.mp3"].enclosureAssetHash;
-      const asset = manifest.assets[assetHash];
+      const episodeUrl = "http://127.0.0.1:3005/meta.mp3";
+      const asset = manifest.assetsByUrl[episodeUrl];
       const fullPath = join(outputDir, asset.localPath);
 
       const tags = ID3.read(fullPath);
