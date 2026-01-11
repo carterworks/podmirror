@@ -83,7 +83,8 @@ describe("podmirror CLI", () => {
       expect(status).toBe(0);
       
       const manifest = JSON.parse(await readFile(join(outputDir, "mirror.json"), "utf-8"));
-      expect(Object.keys(manifest.assets).length).toBe(2); 
+      // 3 unique URLs
+      expect(Object.keys(manifest.assetsByUrl).length).toBe(3); 
       
       const rewrittenFeed = await readFile(join(outputDir, "feed.xml"), "utf-8");
       expect(rewrittenFeed).toContain("media/");
@@ -171,8 +172,8 @@ describe("podmirror CLI", () => {
       await runPodmirror(["http://127.0.0.1:3005/feed.xml", outputDir]);
 
       const manifest = JSON.parse(await readFile(join(outputDir, "mirror.json"), "utf-8"));
-      const assetHash = manifest.items["http://127.0.0.1:3005/meta.mp3"].enclosureAssetHash;
-      const asset = manifest.assets[assetHash];
+      const episodeUrl = "http://127.0.0.1:3005/meta.mp3";
+      const asset = manifest.assetsByUrl[episodeUrl];
       const fullPath = join(outputDir, asset.localPath);
 
       const tags = ID3.read(fullPath);
@@ -215,6 +216,40 @@ describe("podmirror CLI", () => {
 
       const rewrittenFeed = await readFile(join(outputDir, "feed.xml"), "utf-8");
       expect(rewrittenFeed).toContain("https://cdn.example.com/podcast/media/");
+    } finally {
+      server.stop(true);
+    }
+  }, 10000);
+
+  test("should respect the --limit flag", async () => {
+    const mockFeed = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Limit Podcast</title>
+    <item><title>Ep 1</title><enclosure url="http://127.0.0.1:3007/ep1.mp3" /></item>
+    <item><title>Ep 2</title><enclosure url="http://127.0.0.1:3007/ep2.mp3" /></item>
+    <item><title>Ep 3</title><enclosure url="http://127.0.0.1:3007/ep3.mp3" /></item>
+  </channel>
+</rss>`;
+
+    const server = Bun.serve({
+      port: 3007,
+      hostname: "127.0.0.1",
+      fetch(req) {
+        return new Response(mockFeed);
+      },
+    });
+
+    try {
+      const outputDir = join(TEST_OUTPUT_DIR, "limit");
+      await runPodmirror(["--limit", "2", "http://127.0.0.1:3007/feed.xml", outputDir]);
+
+      const manifest = JSON.parse(await readFile(join(outputDir, "mirror.json"), "utf-8"));
+      expect(Object.keys(manifest.items).length).toBe(2);
+      
+      const rewrittenFeed = await readFile(join(outputDir, "feed.xml"), "utf-8");
+      const episodeCount = (rewrittenFeed.match(/<item>/g) || []).length;
+      expect(episodeCount).toBe(2);
     } finally {
       server.stop(true);
     }

@@ -10,6 +10,7 @@ export interface MirrorOptions {
   force?: boolean;
   dryRun?: boolean;
   concurrency?: number;
+  limit?: number;
 }
 
 export interface Manifest {
@@ -22,7 +23,7 @@ export interface Manifest {
     etag?: string;
     lastModified?: string;
   };
-  assets: Record<string, AssetInfo>;
+  assetsByUrl: Record<string, AssetInfo>;
   items: Record<string, EpisodeInfo>;
 }
 
@@ -85,7 +86,7 @@ async function downloadAsset(
       lastModified: response.headers.get("last-modified") || undefined,
     };
   } catch (error) {
-    console.warn(`Error downloading ${kind} from ${url}:`, error);
+    console.warn(`Error downloading ${kind} from ${url}:`, error instanceof Error ? error.message : error);
     return null;
   }
 }
@@ -100,14 +101,14 @@ async function syncMetadata(
   outputDir: string
 ) {
   const ext = extname(mediaPath).toLowerCase();
-  if (ext !== ".mp3") return; // Currently only MP3 supported
+  if (ext !== ".mp3") return; 
 
   const fullPath = join(outputDir, mediaPath);
   
   let imageBuffer: Buffer | undefined;
   const imageHash = episode.imageAssetHash || manifest.podcastImageAssetHash;
   if (imageHash) {
-    const asset = manifest.assets[imageHash];
+    const asset = Object.values(manifest.assetsByUrl).find(a => a.contentHash === imageHash);
     if (asset) {
       try {
         imageBuffer = Buffer.from(await readFile(join(outputDir, asset.localPath)));
@@ -123,14 +124,12 @@ async function syncMetadata(
     artist: author,
     date: pubDate,
     image: imageBuffer ? {
-      mime: "image/jpeg", // Basic assumption
+      mime: "image/jpeg", 
       type: { id: 3, name: "front cover" },
       description: "Artwork",
       imageBuffer,
     } : undefined,
   };
-
-  // TODO: Add episode/season numbers if available in RSS
 
   try {
     const success = ID3.write(tags, fullPath);
@@ -143,8 +142,6 @@ async function syncMetadata(
 }
 
 export async function mirror(options: MirrorOptions) {
-  // ... (previous setup)
-
   const { rssUrl, outputDir, force, dryRun } = options;
   const downloadedAt = new Date().toISOString();
   const timestampDir = downloadedAt.replace(/[:.]/g, "-");
@@ -182,14 +179,11 @@ export async function mirror(options: MirrorOptions) {
     throw new Error("Invalid RSS feed: missing <channel>");
   }
 
-  // Load existing manifest for incremental updates
   let existingManifest: Manifest | null = null;
   try {
     const data = await readFile(join(outputDir, "mirror.json"), "utf-8");
     existingManifest = JSON.parse(data);
-  } catch (e) {
-    // No existing manifest
-  }
+  } catch (e) {}
 
   const manifest: Manifest = {
     downloadedAt,
@@ -200,7 +194,7 @@ export async function mirror(options: MirrorOptions) {
       etag,
       lastModified,
     },
-    assets: existingManifest?.assets || {},
+    assetsByUrl: existingManifest?.assetsByUrl || {},
     items: existingManifest?.items || {},
   };
 
@@ -211,7 +205,14 @@ export async function mirror(options: MirrorOptions) {
     assetsToDownload.push({ url: podcastImage, kind: "podcastImage" });
   }
 
-  const items = Array.isArray(channel.item) ? channel.item : channel.item ? [channel.item] : [];
+  let items = Array.isArray(channel.item) ? channel.item : channel.item ? [channel.item] : [];
+
+  if (options.limit !== undefined) {
+    console.log(`Limiting to first ${options.limit} episodes.`);
+    items = items.slice(0, options.limit);
+    // Update the channel items in the original object so the rewritten XML only contains limited items
+    channel.item = items;
+  }
 
   for (const item of items) {
     const guid = item.guid?.["#text"] || item.guid;
@@ -240,11 +241,9 @@ export async function mirror(options: MirrorOptions) {
   }
 
   const uniqueAssets = Array.from(new Map(assetsToDownload.map((a) => [a.url, a])).values());
-  console.log(`Found ${uniqueAssets.length} unique assets in feed.`);
   const pendingAssets = uniqueAssets.filter((a) => {
     if (force) return true;
-    const existing = Object.values(manifest.assets).find((ea) => ea.sourceUrl === a.url);
-    return !existing;
+    return !manifest.assetsByUrl[a.url];
   });
 
   console.log(`Downloading ${pendingAssets.length} new assets...`);
@@ -256,7 +255,7 @@ export async function mirror(options: MirrorOptions) {
       batch.map(async (a) => {
         const info = await downloadAsset(a.url, a.kind, outputDir, !!dryRun);
         if (info) {
-          manifest.assets[info.contentHash] = info;
+          manifest.assetsByUrl[a.url] = info;
         }
       })
     );
@@ -265,7 +264,7 @@ export async function mirror(options: MirrorOptions) {
   const podcastTitle = channel.title || "";
   const author = channel["itunes:author"] || channel.author || "";
 
-  // Associate assets with items (both existing and newly downloaded)
+  // Associate assets with items
   for (const item of Object.values(manifest.items)) {
     const rssItem = items.find(ri => {
       const guid = ri.guid?.["#text"] || ri.guid;
@@ -276,47 +275,31 @@ export async function mirror(options: MirrorOptions) {
     if (rssItem) {
       const encUrl = rssItem.enclosure?.["@_url"];
       if (encUrl) {
-        const asset = Object.values(manifest.assets).find(a => a.sourceUrl === encUrl);
+        const asset = manifest.assetsByUrl[encUrl];
         if (asset) {
           item.enclosureAssetHash = asset.contentHash;
-          // Sync metadata
           if (!dryRun) {
-            await syncMetadata(
-              asset.localPath,
-              item,
-              podcastTitle,
-              author,
-              rssItem.pubDate || "",
-              manifest,
-              outputDir
-            );
+            await syncMetadata(asset.localPath, item, podcastTitle, author, rssItem.pubDate || "", manifest, outputDir);
           }
         }
       }
 
       const itImg = rssItem["itunes:image"]?.["@_href"];
       if (itImg) {
-        const asset = Object.values(manifest.assets).find(a => a.sourceUrl === itImg);
+        const asset = manifest.assetsByUrl[itImg];
         if (asset) item.imageAssetHash = asset.contentHash;
       }
     }
   }
 
   if (podcastImage) {
-    const asset = Object.values(manifest.assets).find(a => a.sourceUrl === podcastImage);
+    const asset = manifest.assetsByUrl[podcastImage];
     if (asset) manifest.podcastImageAssetHash = asset.contentHash;
   }
 
-  // Rewriting the feed
-  const builder = new XMLBuilder({
-    ignoreAttributes: false,
-    attributeNamePrefix: "@_",
-    format: true,
-  });
-
-  const getLocalUrl = (assetHash?: string) => {
-    if (!assetHash) return undefined;
-    const asset = manifest.assets[assetHash];
+  const getLocalUrlByUrl = (sourceUrl?: string) => {
+    if (!sourceUrl) return undefined;
+    const asset = manifest.assetsByUrl[sourceUrl];
     if (!asset) return undefined;
     if (options.baseUrl) {
       return new URL(asset.localPath, options.baseUrl).toString();
@@ -324,46 +307,32 @@ export async function mirror(options: MirrorOptions) {
     return asset.localPath;
   };
 
-  // Update podcast image
-  if (manifest.podcastImageAssetHash) {
-    const localUrl = getLocalUrl(manifest.podcastImageAssetHash);
+  // Rewrite feed
+  if (podcastImage) {
+    const localUrl = getLocalUrlByUrl(podcastImage);
     if (localUrl) {
       if (channel.image) channel.image.url = localUrl;
       if (channel["itunes:image"]) channel["itunes:image"]["@_href"] = localUrl;
     }
   }
 
-  // Update items
-  for (const item of items) {
-    const guid = item.guid?.["#text"] || item.guid;
-    const enclosureUrl = item.enclosure?.["@_url"];
-    const episodeId = guid || enclosureUrl || `${item.title}-${item.pubDate}`;
-    const episodeInfo = manifest.items[episodeId];
+  for (const rssItem of items) {
+    const encUrl = rssItem.enclosure?.["@_url"];
+    const localEncUrl = getLocalUrlByUrl(encUrl);
+    if (localEncUrl) rssItem.enclosure["@_url"] = localEncUrl;
 
-    if (episodeInfo) {
-      if (episodeInfo.enclosureAssetHash) {
-        const localUrl = getLocalUrl(episodeInfo.enclosureAssetHash);
-        if (localUrl) item.enclosure["@_url"] = localUrl;
-      }
-      if (episodeInfo.imageAssetHash) {
-        const localUrl = getLocalUrl(episodeInfo.imageAssetHash);
-        if (localUrl) {
-          if (item["itunes:image"]) item["itunes:image"]["@_href"] = localUrl;
-        }
-      }
+    const itunesImageUrl = rssItem["itunes:image"]?.["@_href"];
+    const localItunesImageUrl = getLocalUrlByUrl(itunesImageUrl);
+    if (localItunesImageUrl) {
+      rssItem["itunes:image"]["@_href"] = localItunesImageUrl;
     }
   }
 
-  // Update atom:link if present
-  if (channel["atom:link"]) {
-    const links = Array.isArray(channel["atom:link"]) ? channel["atom:link"] : [channel["atom:link"]];
-    for (const link of links) {
-      if (link["@_rel"] === "self") {
-        link["@_href"] = options.baseUrl ? new URL("feed.xml", options.baseUrl).toString() : "feed.xml";
-      }
-    }
-  }
-
+  const builder = new XMLBuilder({
+    ignoreAttributes: false,
+    attributeNamePrefix: "@_",
+    format: true,
+  });
   const rewrittenXml = builder.build(jsonObj);
 
   if (!dryRun) {
