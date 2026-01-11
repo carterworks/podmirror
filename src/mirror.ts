@@ -10,6 +10,7 @@ export interface MirrorOptions {
   force?: boolean;
   dryRun?: boolean;
   concurrency?: number;
+  limit?: number;
 }
 
 export interface Manifest {
@@ -204,7 +205,14 @@ export async function mirror(options: MirrorOptions) {
     assetsToDownload.push({ url: podcastImage, kind: "podcastImage" });
   }
 
-  const items = Array.isArray(channel.item) ? channel.item : channel.item ? [channel.item] : [];
+  let items = Array.isArray(channel.item) ? channel.item : channel.item ? [channel.item] : [];
+
+  if (options.limit !== undefined) {
+    console.log(`Limiting to first ${options.limit} episodes.`);
+    items = items.slice(0, options.limit);
+    // Update the channel items in the original object so the rewritten XML only contains limited items
+    channel.item = items;
+  }
 
   for (const item of items) {
     const guid = item.guid?.["#text"] || item.guid;

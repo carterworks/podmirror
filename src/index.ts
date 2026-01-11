@@ -21,6 +21,9 @@ const { values, positionals } = parseArgs({
       type: "string",
       default: "4",
     },
+    limit: {
+      type: "string",
+    },
     help: {
       type: "boolean",
       short: "h",
@@ -37,6 +40,7 @@ function printUsage() {
   console.error("  --force              Re-fetch even if local copies exist");
   console.error("  --dry-run            Report planned actions without writing");
   console.error("  --concurrency <N>    Control parallel downloads (default: 4)");
+  console.error("  --limit <N>          Limit the number of episodes to mirror");
   console.error("  -h, --help           Show this help message");
 }
 
@@ -60,6 +64,7 @@ try {
     force: values.force,
     dryRun: values["dry-run"],
     concurrency: parseInt(values.concurrency || "4", 10),
+    limit: values.limit ? parseInt(values.limit, 10) : undefined,
   });
   console.log("Done!");
 } catch (error) {
