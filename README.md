@@ -1,44 +1,24 @@
 # podmirror
 
-Create a local, static, re-hostable mirror of a podcast RSS feed.
-
-`podmirror` downloads the source feed XML plus in-scope assets (episode enclosures and artwork), rewrites the feed to point at the downloaded files, and keeps incremental snapshots without re-downloading unchanged media.
-
-## Usage
+`podmirror` is a simple script to download all the episodes of a podcast, to be replayed in a standard media player like foobar or Plex.
 
 ```
-podmirror <rssUrl> <outputDir> [--base-url <baseUrl>]
+$ podmirror --url "https://feeds.npr.org/510289/podcast.xml" --output "./Planet Money" --download-thumbnail --download-sidecar --set-tags --force
+[OK]      Podcast "Planet Money" has 355 episodes
+[354/355] Downloading "355 -Can Trump make buying a home more affordable.mp3"
+# later
+[OK]      Done!
+$ ls
+./Planet Money/feed.xml
+./Planet Money/cover.jpeg
+./Planet Money/355 - Can Trump make buying a home more affordable.mp3
+./Planet Money/355 - Can Trump make buying a home more affordable.jpeg
+./Planet Money/355 - Can Trump make buying a home more affordable.xml
 ```
 
-### Examples
-
-Mirror a feed into `./out/` (rewritten `feed.xml` uses relative URLs):
-
-```sh
-podmirror "https://example.com/podcast/feed.xml" ./out
-```
-
-Mirror a feed for rehosting at a public URL (rewritten `feed.xml` uses absolute URLs):
-
-```sh
-podmirror "https://example.com/podcast/feed.xml" ./out --base-url "https://cdn.example.net/podcast/"
-```
-
-Re-run to update in place (skips unchanged downloads; keeps old asset versions if bytes change):
-
-```sh
-podmirror "https://example.com/podcast/feed.xml" ./out
-```
-
-## Output
-
-`outputDir/` is a self-contained static directory. Key files:
-
-- `feed.xml`: rewritten feed to serve.
-- `feed.source.xml`: exact source feed snapshot.
-- `mirror.json`: manifest with `downloadedAt`, HTTP caching info, and asset records.
-- `media/`: content-addressed enclosure files (`<sha256>.<ext>`).
-- `images/`: content-addressed artwork files (`<sha256>.<ext>`).
-- `snapshots/`: timestamped records of `feed.xml`, `feed.source.xml`, and `mirror.json`.
-
-See `SPEC.md` for the normative behavior and edge cases.
+- `--url "https://feeds.npr.org/510289/podcast.xml"`
+- `--output "./Planet Money"`
+- `--download-thumbnail`: saves the `itunes:image` or `media:thumbnail` as a standalone file.
+- `--download-sidecar`: saves the `<item>` from the full feed XML as a standalone file.
+- `--set-tags`: sets the appropiate embedded media tags (id3 or whatever is idiomatic for the file format)
+- `--force`: by default, `podmirror` will not download episodes that already exist in the output directory. But if `--force` is applied, it will download them anyways.

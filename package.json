@@ -1,16 +1,24 @@
 {
   "name": "podmirror",
-  "module": "index.ts",
-  "type": "module",
   "private": true,
+  "bin": {
+    "podmirror": "src/index.ts"
+  },
+  "type": "module",
+  "module": "src/index.ts",
+  "scripts": {
+    "check": "tsc --noEmit && oxlint --fix-suggestions && oxfmt"
+  },
+  "dependencies": {
+    "fast-xml-parser": "^5.3.4",
+    "log-update": "^7.1.0"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "oxfmt": "^0.28.0",
+    "oxlint": "^1.43.0"
   },
   "peerDependencies": {
     "typescript": "^5"
-  },
-  "dependencies": {
-    "fast-xml-parser": "^5.3.3",
-    "node-id3": "^0.2.9"
   }
 }

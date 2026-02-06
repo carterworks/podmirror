@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:itunes="http://www.itunes.com/dtds/podcast-1.0.dtd" xmlns:media="http://search.yahoo.com/mrss/">
+  <channel>
+    <title>Sample Podcast</title>
+    <description>Sample description</description>
+    <link>https://example.com/podcast</link>
+    <language>en-us</language>
+    <itunes:author>Sample Host</itunes:author>
+    <itunes:image href="{{BASE_URL}}/cover.jpg" />
+    <item>
+      <title>First Episode: Hello/World?</title>
+      <description>Episode one description.</description>
+      <guid>ep-1</guid>
+      <pubDate>Mon, 01 Jan 2024 12:00:00 GMT</pubDate>
+      <itunes:episode>10</itunes:episode>
+      <itunes:season>1</itunes:season>
+      <itunes:image href="{{BASE_URL}}/episode-1.jpg" />
+      <media:thumbnail url="{{BASE_URL}}/episode-1-thumb.jpg" />
+      <enclosure url="{{BASE_URL}}/audio-1.wav" type="audio/wav" length="12345" />
+    </item>
+    <item>
+      <title>Second Episode</title>
+      <description>Episode two description.</description>
+      <guid>ep-2</guid>
+      <pubDate>Mon, 08 Jan 2024 12:00:00 GMT</pubDate>
+      <enclosure url="{{BASE_URL}}/audio-2.wav" type="audio/wav" length="67890" />
+    </item>
+  </channel>
+</rss>
