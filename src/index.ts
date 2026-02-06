@@ -8,7 +8,7 @@ import { downloadFile, runConcurrently } from "./download.ts";
 import { downloadImage } from "./thumbnail.ts";
 import { writeSidecarXml } from "./sidecar.ts";
 import { applyTags, isFfmpegAvailable } from "./tags.ts";
-import { logError, logOk, logProgress, logWarn } from "./log.ts";
+import { createProgress, logError, logOk, logWarn } from "./log.ts";
 
 export type CliConfig = {
   url: string;
@@ -75,36 +75,45 @@ export async function runPipeline(config: CliConfig): Promise<{ failures: number
 
   const resolved = resolveEpisodes(feed.episodes);
   const failures: string[] = [];
-  let started = 0;
+  const progress = createProgress(resolved.length);
 
   await runConcurrently(resolved, config.concurrency, async (episode) => {
-    const current = (started += 1);
+    const taskId = episode.fileName;
     try {
       if (!episode.enclosureUrl) {
         throw new Error("Missing enclosure URL");
       }
-      logProgress(current, resolved.length, `Downloading "${episode.fileName}"`);
+      progress.startTask(taskId, `[audio] Downloading "${episode.fileName}"`);
       const audioPath = join(config.output, episode.fileName);
       await downloadFile(episode.enclosureUrl, audioPath, config.force);
 
+      progress.updateTask(taskId, `[post] Processing "${episode.fileName}"`);
+
       if (config.downloadThumbnail) {
+        progress.updateTask(taskId, `[thumb] Fetching image for "${episode.baseName}"`);
         const imageUrl = episode.imageUrl ?? episode.thumbnailUrl;
         await downloadImage(imageUrl, join(config.output, episode.baseName), config.force);
       }
 
       if (config.downloadSidecar) {
+        progress.updateTask(taskId, `[sidecar] Writing XML for "${episode.baseName}"`);
         await writeSidecarXml(episode, join(config.output, `${episode.baseName}.xml`));
       }
 
       if (config.setTags && (await Bun.file(audioPath).exists())) {
+        progress.updateTask(taskId, `[tags] Applying metadata for "${episode.baseName}"`);
         await applyTags(audioPath, episode, feed.podcast, coverPath);
       }
+      progress.finishTask(taskId, `[done] Downloaded "${episode.fileName}"`);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      logError(`Episode "${episode.title}" failed: ${message}`);
+      progress.logError(`Episode "${episode.title}" failed: ${message}`);
       failures.push(episode.title);
+      progress.failTask(taskId, `[fail] "${episode.fileName}"`);
     }
   });
+
+  progress.stop();
 
   if (failures.length > 0) {
     logWarn(`Done with ${failures.length} failures`);
